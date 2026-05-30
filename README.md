@@ -1,87 +1,113 @@
-<h1 align="center">
-  V2ray Refiner
-</h1>
+# Auto Protocol Mirror-Port Cloudflare Worker
+# THIS README IS FOR THE COMBINED WORKER
 
-<h2 align="center">
-Access your configs by handling websocket requests via Cloudflare.
-  <h3>
-    English 🇬🇧 | <a href="README_FA.md">🇮🇷 فارسی</a>
-  </h3> 
-</h2>
+This Worker keeps the old path format:
 
-> * [YouTube Instructions](https://www.youtube.com/watch?v=3Z6h6clnqC4)
-> * New Update!! [Deploy to Cloudflare Pages](./docs/pages_en.md)
+```text
+/<backend-host>/<backend-ws-path>
+```
 
-[![Version](https://img.shields.io/github/v/release/surfboardv2ray/v2ray-refiner?label=Version&color=blue)](https://github.com/surfboardv2ray/v2ray-refiner/releases/latest)
-[![Download](https://img.shields.io/github/downloads/surfboardv2ray/v2ray-refiner/total?label=Downloads)](https://github.com/surfboardv2ray/v2ray-refiner/releases/latest)
-[![Stars](https://img.shields.io/github/stars/surfboardv2ray/v2ray-refiner?style=flat&label=Stars&color=tomato
-)](https://github.com/surfboardv2ray/v2ray-refiner)
+Example:
 
-## Introduction
-🟢 In an environment where direct connection to v2ray configs is not available, this alternative way can route the traffic to the destination server via Cloudflare.
+```text
+/my-vps.example.com/download
+```
 
-## Prerequisites
-1. Login or Signup at https://dash.cloudflare.com and verify your email address.
-2. Head to `Workers and Pages` to create and name a worker.
-3. Click `Edit Code` code to enter the editing environment.
+## Main behavior
 
-![0](./assets/redline.gif)
+The Worker reads the Cloudflare-facing/front port and mirrors it to the VPS/x-ui backend port.
 
-## TLS Version (Cloudflare-registered domain with PROXY switched to ON)
+### Non-TLS / HTTP backend ports
 
-<p align="center">
-  <img src="assets/tls.jpg" alt="html.jpg" width="600"/>
-</p>
+These front ports are treated as non-TLS backend ports:
 
-🟡 This method only works if your v2ray panel has a domain registered on Cloudflare with a TLS certificate, and Cloudflare proxy status switch to ON. 
+```text
+80, 8080, 8880, 2052, 2082, 2086, 2095
+```
 
-🟡 In your VPS v2ray panel, create a config with these specifications:
-* Type: Vmess, Vless or Trojan
-* Transporation: Websocket (WS)
-* Security: TLS
-* Host: Cloudflare-registered TLS-Certified Domain/Subdomain
-* Port: 443
+Example:
 
-🟡 Get the latest version of the [TLS V2ray Refiner Worker Script](https://github.com/Surfboardv2ray/v2ray-refiner/releases/latest/download/_worker.js), copy and paste/upload the entire content to your Cloudflare worker and hit deploy. (Alternatively, you could copy the worker script from [here](./tls_worker.js))
+```text
+Client -> Worker on port 8080 with path /my-vps.example.com/download
+Worker -> http://my-vps.example.com:8080/download
+```
 
-🟡 Open the deployed version of the worker and enter the TLS config you created on your VPS, and hit `Refine`.
+### TLS / HTTPS backend ports
 
-![0](./assets/redline.gif)
+These front ports are treated as TLS backend ports:
 
-## Non-TLS Version (No Cloudflare-registered domains, or domain with no TLS Certification)
+```text
+443, 8443, 2053, 2083, 2087, 2096
+```
 
-<p align="center">
-  <img src="assets/non-tls.jpg" alt="html.jpg" width="600"/>
-</p>
+Example:
 
-🟠 This method only works if your v2ray panel is not bound to a Cloudflare-registered domain, or the domain doesn't have a TLS Certificate. 
+```text
+Client -> Worker on port 8443 with path /my-vps.example.com/download
+Worker -> https://my-vps.example.com:8443/download
+```
 
-🟠 First create a hostname with Type A pointing to your server IPv4 address, in any free DNS websites like https://noip.com/
+## What to change in x-ui
 
-🟠 In your VPS v2ray panel, create a config with these specifications:
-* Type: Vmess, Vless or Trojan
-* Transporation: Websocket (WS)
-* Security: None
-* Host: Hostname pointing to your server's IP Address (If on Cloudflare, switch the PROXY to OFF)
-* Port: 80
+For each inbound, set its port normally:
 
-🟠 Get the latest version of the [Non-TLS V2ray Refiner Worker Script](https://github.com/Surfboardv2ray/v2ray-refiner/releases/latest/download/_worker.js), copy and paste/upload the entire content to your Cloudflare worker and hit deploy. (Alternatively, you could copy the worker script from [here](./nontls_worker.js))
+```text
+80 / 8080 / 8880 / 2052 / 2082 / 2086 / 2095  -> non-TLS x-ui inbound
+443 / 8443 / 2053 / 2083 / 2087 / 2096        -> TLS x-ui inbound
+```
 
-🟠 Open the deployed version of the worker and enter the Non-TLS config you created on your VPS. Set the hostname to the one you created in step 2. Enter a clean Cloudflare IP address that works on your network, and finally, hit `Refine Config`.
+Keep the x-ui WebSocket path the same, for example:
 
-![0](./assets/redline.gif)
+```text
+/download
+```
 
-## Editing the Non-TLS Script
-🟢 The default port is 80. If your VPS config uses another port, edit the port in the script over at  `const workerPort = 80` and `url.port = 80` accordingly (You need to edit both).
+Do not put `/my-vps.example.com/download` inside x-ui. That full path is only for the client-to-Worker side.
 
-## Editing the TLS Script
-🟢 Allowed ports are those of Cloudflare TLS (443, 8443, 2053, 2083, 2087, 2096), changeable under `const allowedPorts`.
+## Client config examples
 
-## Additional Notes
-🟢 You could get Clean IPs via [IRCF Space Repo](https://github.com/ircfspace/cf2dns/blob/master/list/ipv4.json), but it's recommended to use [Scanners](https://ircf.space/scanner.html).
+For non-TLS backend 8080:
 
-![0](./assets/redline.gif)
+```text
+client front port: 8080
+client host/SNI/WS host: your-worker-domain
+client path: /my-vps.example.com/download
+x-ui inbound: non-TLS, port 8080, WS path /download
+```
 
-## Acknowledgements
-* Handling Websockets snippet and the idea of Rewriting Configs UI tribute to Vfarid's [v2ray-worker-merge](https://github.com/vfarid/v2ray-worker-merge/tree/main).
-* Handling Non-TLS configs snippet tribute to [GetAFreeNode](https://getafreenode.com/blog/index.php/tutorial/31.html).
+For TLS backend 8443:
+
+```text
+client front port: 8443
+client host/SNI/WS host: your-worker-domain
+client path: /my-vps.example.com/download
+x-ui inbound: TLS, port 8443, WS path /download
+```
+
+## Optional explicit backend port override
+
+This Worker still accepts an explicit backend port in the first path segment:
+
+```text
+/my-vps.example.com:8080/download
+```
+
+Then the backend port is taken from the path instead of the front port. The backend protocol is still chosen from the front-port class.
+
+## Verification
+
+Open the Worker URL in a browser on each port, for example:
+
+```text
+http://your-worker-domain:8080/
+https://your-worker-domain:8443/
+```
+
+The info page should show the detected front port and whether it will forward to `http` or `https`.
+
+If a custom port is not detected, the Worker falls back to:
+
+```text
+https -> 443
+http  -> 80
+```
